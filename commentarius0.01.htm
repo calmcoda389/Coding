@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commentarius Diarius</title>
+
+<style>
+  :root {
+    --bg: #040004;
+    --primary: #009f00;
+    --accent: #009f00;
+    --text: #aaa;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: var(--text);
+    max-width: 1080px;
+    margin: 8px auto;
+    padding: 16px;
+  }
+
+  .card {
+    background: #001000;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0px 0px 1px rgba(0,255,0,1);
+    margin-bottom: 16px;
+  }
+
+  input, textarea {
+    width: 38%;
+    padding: 8px;
+    margin: 8px 0;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    box-sizing: border-box;
+    background: #111;
+    color: #aaa;
+  }
+
+  button {
+    background: black;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 10px 20px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  button:hover { opacity: 0.8; }
+
+  .wikitable {
+    width: 100%;
+    border-collapse: collapse;
+    background: #010;
+  }
+
+  .wikitable th, .wikitable td {
+    border-top: 1px solid #040;
+    padding: 10px;
+    text-align: left;
+  }
+
+  .wikitable th {
+    background: var(--primary);
+    color: var(--bg);
+    cursor: pointer;
+  }
+
+  .del-btn { width: 48px; background: #000; padding: 10px 16px; }
+  .edit-btn { width: 48px; background: #000; padding: 10px 16px; }
+
+  @media (max-width: 600px) {
+    body { margin: 10px; padding: 10px; }
+    .wikitable th, .wikitable td { padding: 6px; }
+  }
+</style>
+</head>
+<body>
+<header style="text-align:center;">
+  <h1 style="font-family: 'Georgia'; color: #00ff00; letter-spacing: -0.06em;">
+    <i><b>Commentarius</b></i>
+  </h1>
+</header>
+<div class="card">
+  <!-- HIER DIE EINGEFÜGTE ZEILE -->
+  <h3 id="form-title">Neuer Eintrag</h3>
+
+  <input id="title" placeholder="Titel (erforderlich)">
+  <input id="cat" placeholder="Kategorie">
+  <textarea style="width: 73%" id="desc" placeholder="Info"></textarea>
+
+  <div style="width: 100%" style="display: flex; gap: 8px;">
+    <input style="text-align:center; width:18%" type="number" id="tag" placeholder="1">
+    <input style="text-align:center; width:18%" type="number" id="monat" placeholder="1">
+    <input style="text-align:center; width:35%" type="number" id="jahr" placeholder="2026">
+  </div>
+  
+  <br>
+  <center>
+  <button id="saveBtn" onclick="saveEntry()"><b>Speichern</b></button>
+  </center>
+</div>
+<div class="card">
+  <p>Daten importieren</p>
+  <input style="width: 100%" type="file" onchange="importData(this.files[0])">
+  <p>Daten exportieren</p>
+  <button onclick="exportData()">Liste als .json exportieren</button>
+  </div>
+<div class="card" >
+  <p>Liste</p>
+  <input id="search" placeholder="🔍 Suche..." oninput="render()"><border-bottom: 1px solid #044;>
+
+  <table id="table" class="wikitable">
+    <thead>
+      <tr>
+        <th onclick="sortBy('date')">Datum <span id="arrow-date"></span></th>
+        <th onclick="sortBy('title')">Name <span id="arrow-title"></span></th>
+        <th>Info</th>
+        <th>Kategorie</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const KEY = "commentarius_events";
+let events = JSON.parse(localStorage.getItem(KEY) || "[]");
+let currentSort = { key: "date", asc: false };
+let editId = null;
+
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify(events));
+}
+
+function clearInputs() {
+  ['title','cat','desc','jahr','monat','tag'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  editId = null;
+  document.getElementById("form-title").textContent = "Neuer Eintrag";
+  document.getElementById("saveBtn").textContent = "Speichern";
+}
+
+function nextId() {
+  if (events.length === 0) return 1;
+  return Math.max(...events.map(e => Number(e.id))) + 1;
+}
+
+function saveEntry() {
+  const titleVal = document.getElementById("title").value;
+  if (!titleVal) return alert("Bitte wenigstens einen Titel eingeben!");
+
+  const date = new Date(
+    +document.getElementById("jahr").value || new Date().getFullYear(),
+    (+document.getElementById("monat").value - 1) || new Date().getMonth(),
+    +document.getElementById("tag").value || new Date().getDate()
+  );
+
+  if (editId) {
+    const e = events.find(x => x.id === editId);
+    e.title = titleVal;
+    e.category = document.getElementById("cat").value;
+    e.description = document.getElementById("desc").value;
+    e.start = date.toISOString();
+  } else {
+    events.push({
+      id: nextId(),
+      title: titleVal,
+      category: document.getElementById("cat").value,
+      description: document.getElementById("desc").value,
+      start: date.toISOString()
+    });
+  }
+
+  saveLocal();
+  clearInputs();
+  render();
+}
+
+function del(id) {
+  events = events.filter(e => e.id !== id);
+  saveLocal();
+  render();
+}
+
+function edit(id) {
+  const e = events.find(x => x.id === id);
+  editId = id;
+
+  document.getElementById("title").value = e.title;
+  document.getElementById("cat").value = e.category;
+  document.getElementById("desc").value = e.description;
+
+  const d = new Date(e.start);
+  document.getElementById("tag").value = d.getDate();
+  document.getElementById("monat").value = d.getMonth() + 1;
+  document.getElementById("jahr").value = d.getFullYear();
+
+  document.getElementById("form-title").textContent = "Eintrag bearbeiten";
+  document.getElementById("saveBtn").textContent = "Aktualisieren";
+}
+
+function sortBy(key) {
+  if (currentSort.key === key) {
+    currentSort.asc = !currentSort.asc;
+  } else {
+    currentSort.key = key;
+    currentSort.asc = true;
+  }
+  render();
+}
+
+function updateArrows() {
+  document.getElementById("arrow-date").textContent =
+    currentSort.key === "date" ? (currentSort.asc ? "▲" : "▼") : "";
+
+  document.getElementById("arrow-title").textContent =
+    currentSort.key === "title" ? (currentSort.asc ? "▲" : "▼") : "";
+}
+
+function catColor(cat) {
+  const map = {
+    Konsolen: "#88FF00",
+    Games: "#ff8800",
+    Weltgeschehen: "#8844FF",
+    Privat: "#ff0000",
+    Tests: "#FF00FF"
+  };
+  return map[cat] || "#ccc";
+}
+
+function render() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const tbody = document.querySelector("#table tbody");
+
+  let filtered = events.filter(e =>
+    e.title.toLowerCase().includes(q) ||
+    (e.category||"").toLowerCase().includes(q) ||
+    (e.description||"").toLowerCase().includes(q)
+  );
+
+  filtered.sort((a,b) => {
+    let va, vb;
+    if (currentSort.key === "date") {
+      va = new Date(a.start);
+      vb = new Date(b.start);
+    } else {
+      va = (a[currentSort.key] || "").toLowerCase();
+      vb = (b[currentSort.key] || "").toLowerCase();
+    }
+    return currentSort.asc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
+
+  tbody.innerHTML = filtered.map(e => {
+    const d = new Date(e.start);
+    const ds = d.toLocaleDateString("de-DE");
+
+    return `
+      <tr>
+        <td>${ds}</td>
+        <td><strong>${e.title}</strong></td>
+        <td><small>${e.description || ""}</small></td>
+        <td><i><small style="color:${catColor(e.category)}">${e.category || "-"}</small></i></td>
+        <td>
+          <button class="edit-btn" onclick="edit(${e.id})">✎</button>
+          <button style="color: #800" class="del-btn" onclick="del(${e.id})">✖</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  updateArrows();
+}
+
+function timestamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hour = pad(d.getHours());
+  const min = pad(d.getMinutes());
+
+  return `${year}-${month}-${day}_${hour}-${min}`;
+}
+
+function exportData() {
+  const formatted = JSON.stringify(events, null, 2);
+  const blob = new Blob([formatted], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `commentarius_${timestamp()}.json`;
+  a.click();
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    events = JSON.parse(reader.result);
+    saveLocal();
+    render();
+  };
+  reader.readAsText(file);
+}
+
+render();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Commentarius Diarius</title>
+
+<style>
+  :root {
+    --bg: #000020;
+    --primary: #44BB44;
+    --accent: #ff8800;
+    --text: #ccc;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: var(--text);
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 20px;
+  }
+
+  .card {
+    background: black;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(256,256,256,0.1);
+    margin-bottom: 20px;
+  }
+
+  input, textarea {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+    background: #111;
+    color: #eee;
+  }
+
+  button {
+    background: var(--accent);
+    color: black;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  button:hover { opacity: 0.8; }
+
+  .wikitable {
+    width: 100%;
+    border-collapse: collapse;
+    background: black;
+  }
+
+  .wikitable th, .wikitable td {
+    border-bottom: 1px solid #044;
+    padding: 12px;
+    text-align: left;
+  }
+
+  .wikitable th {
+    background: #f8f9fa;
+    color: var(--primary);
+    cursor: pointer;
+  }
+
+  .del-btn { background: #ee4400; padding: 5px 10px; }
+  .edit-btn { background: #44aaff; padding: 5px 10px; }
+
+  @media (max-width: 600px) {
+    body { margin: 10px; padding: 10px; }
+    .wikitable th, .wikitable td { padding: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<header style="text-align:center">
+  <h1>Commentarius Diarius</h1>
+</header>
+
+<div class="card">
+  <h3 id="form-title">Neuer Eintrag</h3>
+
+  <input id="title" placeholder="Titel (erforderlich)">
+  <input id="cat" placeholder="Kategorie">
+  <textarea id="desc" placeholder="Info"></textarea>
+
+  <div style="display: flex; gap: 10px;">
+    <input type="number" id="tag" placeholder="Tag">
+    <input type="number" id="monat" placeholder="Monat">
+    <input type="number" id="jahr" placeholder="Jahr">
+  </div>
+
+  <button id="saveBtn" onclick="saveEntry()">Speichern</button>
+  <button onclick="exportData()">Exportieren</button>
+  <input type="file" onchange="importData(this.files[0])">
+</div>
+
+<div class="card">
+  <input id="search" placeholder="🔍 Suche..." oninput="render()">
+
+  <table id="table" class="wikitable">
+    <thead>
+      <tr>
+        <th onclick="sortBy('date')">Datum <span id="arrow-date"></span></th>
+        <th onclick="sortBy('title')">Name <span id="arrow-title"></span></th>
+        <th>Info</th>
+        <th>Kategorie</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const KEY = "commentarius_events";
+let events = JSON.parse(localStorage.getItem(KEY) || "[]");
+let currentSort = { key: "date", asc: false };
+let editId = null;
+
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify(events));
+}
+
+function clearInputs() {
+  ['title','cat','desc','jahr','monat','tag'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  editId = null;
+  document.getElementById("form-title").textContent = "Neuer Eintrag";
+  document.getElementById("saveBtn").textContent = "Speichern";
+}
+
+function nextId() {
+  if (events.length === 0) return 1;
+  return Math.max(...events.map(e => Number(e.id))) + 1;
+}
+
+function saveEntry() {
+  const titleVal = document.getElementById("title").value;
+  if (!titleVal) return alert("Bitte wenigstens einen Titel eingeben!");
+
+  const date = new Date(
+    +document.getElementById("jahr").value || new Date().getFullYear(),
+    (+document.getElementById("monat").value - 1) || new Date().getMonth(),
+    +document.getElementById("tag").value || new Date().getDate()
+  );
+
+  if (editId) {
+    const e = events.find(x => x.id === editId);
+    e.title = titleVal;
+    e.category = document.getElementById("cat").value;
+    e.description = document.getElementById("desc").value;
+    e.start = date.toISOString();
+  } else {
+    events.push({
+      id: nextId(),
+      title: titleVal,
+      category: document.getElementById("cat").value,
+      description: document.getElementById("desc").value,
+      start: date.toISOString()
+    });
+  }
+
+  saveLocal();
+  clearInputs();
+  render();
+}
+
+function del(id) {
+  events = events.filter(e => e.id !== id);
+  saveLocal();
+  render();
+}
+
+function edit(id) {
+  const e = events.find(x => x.id === id);
+  editId = id;
+
+  document.getElementById("title").value = e.title;
+  document.getElementById("cat").value = e.category;
+  document.getElementById("desc").value = e.description;
+
+  const d = new Date(e.start);
+  document.getElementById("tag").value = d.getDate();
+  document.getElementById("monat").value = d.getMonth() + 1;
+  document.getElementById("jahr").value = d.getFullYear();
+
+  document.getElementById("form-title").textContent = "Eintrag bearbeiten";
+  document.getElementById("saveBtn").textContent = "Aktualisieren";
+}
+
+function sortBy(key) {
+  if (currentSort.key === key) {
+    currentSort.asc = !currentSort.asc;
+  } else {
+    currentSort.key = key;
+    currentSort.asc = true;
+  }
+  render();
+}
+
+function updateArrows() {
+  document.getElementById("arrow-date").textContent =
+    currentSort.key === "date" ? (currentSort.asc ? "▲" : "▼") : "";
+
+  document.getElementById("arrow-title").textContent =
+    currentSort.key === "title" ? (currentSort.asc ? "▲" : "▼") : "";
+}
+
+function catColor(cat) {
+  const map = {
+    Arbeit: "#44BB44",
+    Privat: "#ff8800",
+    Wichtig: "#ff4444"
+  };
+  return map[cat] || "#ccc";
+}
+
+function render() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const tbody = document.querySelector("#table tbody");
+
+  let filtered = events.filter(e =>
+    e.title.toLowerCase().includes(q) ||
+    (e.category||"").toLowerCase().includes(q) ||
+    (e.description||"").toLowerCase().includes(q)
+  );
+
+  filtered.sort((a,b) => {
+    let va, vb;
+    if (currentSort.key === "date") {
+      va = new Date(a.start);
+      vb = new Date(b.start);
+    } else {
+      va = (a[currentSort.key] || "").toLowerCase();
+      vb = (b[currentSort.key] || "").toLowerCase();
+    }
+    return currentSort.asc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
+
+  tbody.innerHTML = filtered.map(e => {
+    const d = new Date(e.start);
+    const ds = d.toLocaleDateString("de-DE");
+
+    return `
+      <tr>
+        <td>${ds}</td>
+        <td><strong>${e.title}</strong></td>
+        <td>${e.description || ""}</td>
+        <td><small style="color:${catColor(e.category)}">${e.category || "-"}</small></td>
+        <td>
+          <button class="edit-btn" onclick="edit(${e.id})">✎</button>
+          <button class="del-btn" onclick="del(${e.id})">✖</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  updateArrows();
+}
+
+function timestamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hour = pad(d.getHours());
+  const min = pad(d.getMinutes());
+
+  return `${year}-${month}-${day}_${hour}-${min}`;
+}
+
+function exportData() {
+  const formatted = JSON.stringify(events, null, 2);
+  const blob = new Blob([formatted], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `commentarius_${timestamp()}.json`;
+  a.click();
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    events = JSON.parse(reader.result);
+    saveLocal();
+    render();
+  };
+  reader.readAsText(file);
+}
+
+render();
+</script>
+
+</body>
+</html>
